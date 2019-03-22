@@ -229,8 +229,6 @@ def main():
 
     sv.SmoothedPlot(guess, 'Smoothed mode of ' + r'$h_t$')
 
-    # Estimate through importance sampling
-
     plt.show()
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ class SV:
         self.y = np.loadtxt(dir, dtype=np.float32, skiprows=1)
         self.n = len(self.y)
 
-        self.x = np.linspace(0,10,self.n)
+        self.x = np.linspace(0,self.n,self.n)
 
         self.mu = np.mean(self.y)
 
@@ -31,7 +31,7 @@ class SV:
         self.y = x
 
     def QML(self, params):
-        phi, omega, vareta = params
+        phi, omega, vareta, vdeg = params
 
         v, f, k, a, P = self.KF(params)
 
@@ -43,7 +43,7 @@ class SV:
         return -QML
 
     def KF(self, params):
-        [phi, omega, vareta] = params
+        [phi, omega, vareta, vdeg] = params
 
         # kalman filter
         v = np.zeros(self.n)
@@ -61,9 +61,12 @@ class SV:
         # R = 1
         # Q = vareta
 
+        meaneps = 1/vdeg - 1
+        vareps = 1/vdeg + 1
+
         for t in range(self.n):
-            v[t] = self.y[t] - a[t] - self.meaneps
-            f[t] = P[t] + self.vareps
+            v[t] = self.y[t] - a[t] - meaneps
+            f[t] = P[t] + vareps
             k[t] = phi * P[t]/f[t]
 
             a[t+1] = phi * a[t] + k[t]*v[t] + omega
@@ -93,17 +96,16 @@ class SV:
 
         return r, N, alphahat, V
 
-    def FilteredPlot(self, a, P):
+    def FilteredPlot(self, a):
         plt.figure()
         plt.plot(self.x, a[1:], color="blue", label=r'$\alpha_t$', linewidth=0.5)
         plt.plot(self.x, self.y, color="grey", label='SV data', linewidth=1, alpha=0.3)
-
         plt.legend(loc='upper right')
         plt.xlabel(r'$t$',fontsize=16)
         plt.title('Filtered state ' + r'$\alpha_t$ ',fontsize=12)
         plt.draw()
 
-    def SmoothedPlot(self, alphahat, V, title):
+    def SmoothedPlot(self, alphahat, title):
         plt.figure()
         plt.plot(self.x, alphahat[1:], color="blue", label='Smoothed state', linewidth=0.5)
         plt.plot(self.x, self.y, color="grey", label='SV data', linewidth=1, alpha=0.3)
@@ -123,17 +125,18 @@ class SV:
         return pdotdot
 
     def ModeEstimation(self, params):
-        phi, omega, vareta = params
+        phi, omega, vareta, vdeg = params
         # first guess
         yminmu = self.y - self.mu
 
         guess = np.zeros(self.n)
+        h = np.log((1/self.n) * np.sum((yminmu)**2))
         for t in range(self.n):
-            guess[t] = np.log((1/self.n) * np.sum((yminmu)**2))
+            guess[t] = h
 
         score = np.sum(guess)
 
-        while score > 0.1:
+        while score > 10e-10:
             A = np.zeros(self.n)
             z = np.zeros(self.n)
 
@@ -141,9 +144,10 @@ class SV:
                 A[t] = -1/self.pdotdot(guess[t], self.y[t])
                 z[t] = guess[t] + A[t] * self.pdot(guess[t], self.y[t])
 
-            alphahat, V = self.modeKFS(z, A, [phi, omega, vareta])
+            alphahat = self.modeKFS(z, A, [phi, omega, vareta, vdeg])
 
             gmingcross = np.zeros(self.n)
+
             for t in range(self.n):
                 gmingcross[t] = np.abs(guess[t] - alphahat[t])
 
@@ -152,10 +156,10 @@ class SV:
 
             guess = alphahat
 
-        return guess, V, A
+        return -guess
 
     def modeKFS(self, z, A, params):
-        phi, omega, vareta = params
+        phi, omega, vareta, vdeg = params
         # kalman filter
         v = np.zeros(self.n)
         f = np.zeros(self.n)
@@ -192,7 +196,7 @@ class SV:
             alphahat[t] = a[t] + P[t] * r[t-1]
             V[t] = P[t] - (P[t] ** 2) * N[t-1]
 
-        return alphahat, V
+        return alphahat
 
 def main():
     # Read the data
@@ -209,26 +213,26 @@ def main():
     """c)"""
     # phi, psi, vareta
 
-    bnd = ((0.00001, 0.99999), (None, None), (0, None))
-    [phi, omega, vareta] = minimize(sv.QML, (0.00001, 5, 5), bounds=bnd).x
+    bnd = ((0.00001, 0.99999), (None, None), (0, None), (0.00001, None))
+    [phi, omega, vareta, vdeg] = minimize(sv.QML, (0.00001, 0, 0, 0.00001), bounds=bnd).x
     print("phi: {}".format(phi))
     print("Omega: {}".format(omega))
     print("Vareta: {}".format(vareta))
+    print("v: {}".format(vdeg))
+
 
     """d)"""
-    v, f, k, a, P = sv.KF([phi, omega, vareta])
+    v, f, k, a, P = sv.KF([phi, omega, vareta, vdeg])
     r, N, alphahat, V = sv.KS(v, f, k, a, P, phi)
 
-    sv.FilteredPlot(a, P)
-    sv.SmoothedPlot(alphahat, V, 'Smoothed estimate ' + r'$h_t$')
+    sv.FilteredPlot(a)
+    sv.SmoothedPlot(alphahat, 'Smoothed estimate ' + r'$h_t$')
 
     """e)"""
     # Mode estimate
-    guess, V, A = sv.ModeEstimation([phi, omega, vareta])
+    guess = sv.ModeEstimation([phi, omega, vareta, vdeg])
 
-    sv.SmoothedPlot(guess, V, 'Smoothed mode of ' + r'$h_t$')
-
-    # Estimate through importance sampling
+    sv.SmoothedPlot(guess, 'Smoothed mode of ' + r'$h_t$')
 
     plt.show()
 
