@@ -689,6 +689,7 @@ def main():
 
         print("Estimated through MLE")
         print("phi: {}, vareps: {}, vareta: {}".format(nile.T, nile.vareps, nile.vareta))
+        
     nile.KalmanFilter(nile.y)
     #nile.fig1()
 
