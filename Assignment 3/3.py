@@ -8,7 +8,7 @@ class SV:
         self.y = np.loadtxt(dir, dtype=np.float32, skiprows=1)
         self.n = len(self.y)
 
-        self.x = np.linspace(0,10,self.n)
+        self.x = np.linspace(0,self.n,self.n)
 
         self.mu = np.mean(self.y)
 
@@ -93,17 +93,16 @@ class SV:
 
         return r, N, alphahat, V
 
-    def FilteredPlot(self, a, P):
+    def FilteredPlot(self, a):
         plt.figure()
         plt.plot(self.x, a[1:], color="blue", label=r'$\alpha_t$', linewidth=0.5)
         plt.plot(self.x, self.y, color="grey", label='SV data', linewidth=1, alpha=0.3)
-
         plt.legend(loc='upper right')
         plt.xlabel(r'$t$',fontsize=16)
         plt.title('Filtered state ' + r'$\alpha_t$ ',fontsize=12)
         plt.draw()
 
-    def SmoothedPlot(self, alphahat, V, title):
+    def SmoothedPlot(self, alphahat, title):
         plt.figure()
         plt.plot(self.x, alphahat[1:], color="blue", label='Smoothed state', linewidth=0.5)
         plt.plot(self.x, self.y, color="grey", label='SV data', linewidth=1, alpha=0.3)
@@ -128,12 +127,13 @@ class SV:
         yminmu = self.y - self.mu
 
         guess = np.zeros(self.n)
+        h = np.log((1/self.n) * np.sum((yminmu)**2))
         for t in range(self.n):
-            guess[t] = np.log((1/self.n) * np.sum((yminmu)**2))
+            guess[t] = h
 
-        score = 10000
+        score = np.sum(guess)
 
-        while score > 10e-6:
+        while score > 10e-10:
             A = np.zeros(self.n)
             z = np.zeros(self.n)
 
@@ -141,19 +141,19 @@ class SV:
                 A[t] = -1/self.pdotdot(guess[t], self.y[t])
                 z[t] = guess[t] + A[t] * self.pdot(guess[t], self.y[t])
 
-            alphahat, V = self.modeKFS(z, A, [phi, omega, vareta])
+            alphahat = self.modeKFS(z, A, [phi, omega, vareta])
 
-            newguess = np.zeros(self.n)
+            gmingcross = np.zeros(self.n)
+
             for t in range(self.n):
-                newguess[t] = -1.27 + alphahat[t]
+                gmingcross[t] = np.abs(guess[t] - alphahat[t])
 
-            scoreguess = np.zeros(self.n)
-            for t in range(self.n):
-                scoreguess[t] = (guess[t] - newguess[t])**2
+            score = np.mean(gmingcross)
+            print(score)
 
-            guess = newguess
+            guess = alphahat
 
-        return newguess, alphahat, V, A
+        return -guess
 
     def modeKFS(self, z, A, params):
         phi, omega, vareta = params
@@ -193,7 +193,7 @@ class SV:
             alphahat[t] = a[t] + P[t] * r[t-1]
             V[t] = P[t] - (P[t] ** 2) * N[t-1]
 
-        return alphahat, V
+        return alphahat
 
 def main():
     # Read the data
@@ -220,14 +220,14 @@ def main():
     v, f, k, a, P = sv.KF([phi, omega, vareta])
     r, N, alphahat, V = sv.KS(v, f, k, a, P, phi)
 
-    sv.FilteredPlot(a, P)
-    sv.SmoothedPlot(alphahat, V, 'Smoothed estimate ' + r'$h_t$')
+    sv.FilteredPlot(a)
+    sv.SmoothedPlot(alphahat, 'Smoothed estimate ' + r'$h_t$')
 
     """e)"""
     # Mode estimate
-    mode, alphahat, V, A = sv.ModeEstimation([phi, omega, vareta])
+    guess = sv.ModeEstimation([phi, omega, vareta])
 
-    sv.SmoothedPlot(alphahat, V, 'Smoothed mode of ' + r'$h_t$')
+    sv.SmoothedPlot(guess, 'Smoothed mode of ' + r'$h_t$')
 
     # Estimate through importance sampling
 
